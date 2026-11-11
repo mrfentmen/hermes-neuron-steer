@@ -51,7 +51,8 @@ def handle_find(params, **kwargs):
                 "'positive_prompts' list and a non-empty 'negative_prompts' list."
             )
         model_id = params.get("model") or DEFAULT_MODEL
-        model, tok = engine.load_model(model_id)
+        model, tok = engine.load_model(
+            model_id, allow_download=bool(params.get("allow_download", False)))
         circuit = engine.find_circuit(
             model,
             tok,
@@ -94,7 +95,8 @@ def handle_generate(params, **kwargs):
             raise ValueError("neuron_steer_generate requires 'prompt' and 'circuit'.")
         circuit = store.load_circuit(params["circuit"])
         model_id = params.get("model") or circuit.model_id or DEFAULT_MODEL
-        model, tok = engine.load_model(model_id)
+        model, tok = engine.load_model(
+            model_id, allow_download=bool(params.get("allow_download", False)))
         multiplier = float(params.get("multiplier", 0.0))
         max_new = int(params.get("max_new_tokens", 64))
         steered = engine.generate(
@@ -155,7 +157,8 @@ def handle_scan(params, **kwargs):
             )
         circuit = store.load_circuit(params["circuit"])
         model_id = params.get("model") or circuit.model_id or DEFAULT_MODEL
-        model, tok = engine.load_model(model_id)
+        model, tok = engine.load_model(
+            model_id, allow_download=bool(params.get("allow_download", False)))
         rows = engine.scan(
             model, tok, circuit,
             prompts=list(params["prompts"]),
