@@ -74,6 +74,10 @@ GENERATE = {
                 "type": "boolean",
                 "description": "Also generate the unsteered baseline for comparison (default true).",
             },
+            "min_quality": {
+                "type": "number",
+                "description": "Optional quality floor (0-1). If the steered output's CNA quality falls below it, the result carries a warning and a fallback generation at a safer dose, halfway back toward baseline.",
+            },
         },
         "required": ["prompt", "circuit"],
     },
@@ -122,4 +126,48 @@ LIST = {
     "parameters": {"type": "object", "properties": {}},
 }
 
-ALL = [FIND, GENERATE, SCAN, LIST]
+SHOW = {
+    "name": "neuron_steer_show",
+    "description": (
+        "Inspect a saved neuron circuit: how many neurons it has, which "
+        "layers they sit in (the full layer histogram plus the strongest "
+        "neuron in each layer), and the strongest neurons overall with "
+        "their CNA deltas. Reads the saved circuit only; no model is "
+        "loaded."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "circuit": {"type": "string", "description": "Name of a saved circuit."},
+        },
+        "required": ["circuit"],
+    },
+}
+
+DEMO = {
+    "name": "neuron_steer_demo",
+    "description": (
+        "Run the whole NeuronSteer flow offline, in seconds, with no "
+        "model download: builds a tiny randomly initialised Llama in "
+        "memory, finds a circuit by contrast, generates baseline vs "
+        "ablated vs amplified, and dose-scans it. The weights are random "
+        "so the text is gibberish; the demo proves the mechanics end to "
+        "end. Use neuron_steer_find for a real model."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "top_k": {
+                "type": "integer",
+                "description": "Circuit size for the demo (default 16, max 512).",
+            },
+            "max_new_tokens": {
+                "type": "integer",
+                "description": "Tokens per demo generation (default 16, max 64).",
+            },
+        },
+        "required": [],
+    },
+}
+
+ALL = [FIND, GENERATE, SCAN, LIST, SHOW, DEMO]
