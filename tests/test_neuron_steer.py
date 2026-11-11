@@ -286,8 +286,8 @@ class RegistrationTest(unittest.TestCase):
             self.assertEqual(toolset, "neuron_steer")
             self.assertTrue(schema["description"])
             self.assertTrue(callable(handler))
-        self.assertIn("steer", ctx.commands)
-        self.assertIn("steer", ctx.cli_commands)
+        self.assertIn("neuron-steer", ctx.commands)
+        self.assertIn("neuron-steer", ctx.cli_commands)
 
     def test_handlers_return_json_and_fail_cleanly(self):
         plugin = self._load_plugin()
@@ -297,8 +297,25 @@ class RegistrationTest(unittest.TestCase):
         self.assertTrue(out["success"])
         out = json.loads(ctx.tools["neuron_steer_find"][2]({"name": "x"}))
         self.assertFalse(out["success"])  # missing prompt sets -> clean error
-        slash = ctx.commands["steer"][0]()
+        slash = ctx.commands["neuron-steer"][0]()
         self.assertIn("NeuronSteer", slash)
+
+
+class StoreHomeTest(unittest.TestCase):
+    def test_default_circuits_dir_is_under_hermes_home(self):
+        # Reviewer fix (v1.2.1): circuits must not default to the plugin
+        # install dir (lost on update, shared across profiles). With no
+        # NEURON_STEER_HOME override the dir ends in neuron-steer/circuits
+        # under the Hermes home and is not inside the plugin directory.
+        saved = os.environ.pop("NEURON_STEER_HOME", None)
+        try:
+            d = store.circuits_dir()
+        finally:
+            if saved is not None:
+                os.environ["NEURON_STEER_HOME"] = saved
+        self.assertEqual(d.name, "circuits")
+        self.assertEqual(d.parent.name, "neuron-steer")
+        self.assertNotEqual(d, PLUGIN_DIR / "circuits")
 
 
 class DemoToolTest(unittest.TestCase):
