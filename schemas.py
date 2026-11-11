@@ -41,6 +41,10 @@ FIND = {
                 "type": "integer",
                 "description": "Exact number of neurons to keep. Overrides top_fraction.",
             },
+            "allow_download": {
+                "type": "boolean",
+                "description": "Default false: only models already in the local Hugging Face cache are used, and an uncached model fails with instructions instead of downloading. Set true ONLY with the user's explicit OK to download the model (3.1 GB for the default) from Hugging Face.",
+            },
         },
         "required": ["name", "positive_prompts", "negative_prompts"],
     },
@@ -77,6 +81,10 @@ GENERATE = {
             "min_quality": {
                 "type": "number",
                 "description": "Optional quality floor (0-1). If the steered output's CNA quality falls below it, the result carries a warning and a fallback generation at a safer dose, halfway back toward baseline.",
+            },
+            "allow_download": {
+                "type": "boolean",
+                "description": "Default false: only models already in the local Hugging Face cache are used, and an uncached model fails with instructions instead of downloading. Set true ONLY with the user's explicit OK to download the model (3.1 GB for the default) from Hugging Face.",
             },
         },
         "required": ["prompt", "circuit"],
@@ -115,6 +123,10 @@ SCAN = {
                 "description": "Hugging Face model id. Optional; defaults to the circuit's model.",
             },
             "max_new_tokens": {"type": "integer", "description": "Max tokens per generation (default 64)."},
+            "allow_download": {
+                "type": "boolean",
+                "description": "Default false: only models already in the local Hugging Face cache are used, and an uncached model fails with instructions instead of downloading. Set true ONLY with the user's explicit OK to download the model (3.1 GB for the default) from Hugging Face.",
+            },
         },
         "required": ["circuit", "prompts", "multipliers"],
     },
