@@ -22,6 +22,7 @@ sys.path.insert(0, str(PLUGIN_DIR))
 
 import engine  # noqa: E402
 import store  # noqa: E402
+import tools  # noqa: E402
 from engine import Circuit, NeuronRef  # noqa: E402
 
 
@@ -278,7 +279,8 @@ class RegistrationTest(unittest.TestCase):
         self.assertEqual(
             set(ctx.tools),
             {"neuron_steer_find", "neuron_steer_generate",
-             "neuron_steer_scan", "neuron_steer_list"},
+             "neuron_steer_scan", "neuron_steer_list",
+             "neuron_steer_show", "neuron_steer_demo"},
         )
         for name, (toolset, schema, handler) in ctx.tools.items():
             self.assertEqual(toolset, "neuron_steer")
@@ -297,6 +299,123 @@ class RegistrationTest(unittest.TestCase):
         self.assertFalse(out["success"])  # missing prompt sets -> clean error
         slash = ctx.commands["steer"][0]()
         self.assertIn("NeuronSteer", slash)
+
+
+class DemoToolTest(unittest.TestCase):
+    def test_demo_runs_fully_offline(self):
+        # The demo must never call load_model: it builds its tiny model in
+        # memory. Patch load_model to explode so any regression fails here
+        # instead of silently starting a download.
+        def _boom(model_id, device=None):
+            raise AssertionError("demo must not load a model")
+
+        original = engine.load_model
+        engine.load_model = _boom
+        try:
+            out = json.loads(tools.handle_demo({}))
+        finally:
+            engine.load_model = original
+        self.assertTrue(out["success"])
+        self.assertTrue(out["demo"])
+        self.assertEqual(out["find"]["circuit_size"], 16)
+        self.assertEqual(out["model"]["total_mlp_neurons"], 4 * 128)
+        gen = out["generate"]
+        self.assertEqual(gen["prompt"], "the quick brown fox")
+        for key in ("baseline", "ablated_x0", "amplified_x2"):
+            self.assertIn("text", gen[key])
+            self.assertIn("quality", gen[key])
+        self.assertEqual([r["multiplier"] for r in out["scan"]], [1.0, 0.0, 2.0])
+
+    def test_demo_rejects_bad_sizes(self):
+        out = json.loads(tools.handle_demo({"top_k": 9999}))
+        self.assertFalse(out["success"])
+
+
+class ShowToolTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._old = os.environ.get("NEURON_STEER_HOME")
+        os.environ["NEURON_STEER_HOME"] = self.tmp.name
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("NEURON_STEER_HOME", None)
+        else:
+            os.environ["NEURON_STEER_HOME"] = self._old
+        self.tmp.cleanup()
+
+    def test_show_reports_layers_and_top_neurons(self):
+        circuit = Circuit(
+            "tiny",
+            [NeuronRef(0, 1, 0.9), NeuronRef(0, 2, -0.4), NeuronRef(2, 5, 0.7)],
+            positive_count=3, negative_count=3,
+        )
+        store.save_circuit("inspect-me", circuit)
+        out = json.loads(tools.handle_show({"circuit": "inspect-me"}))
+        self.assertTrue(out["success"])
+        self.assertEqual(out["neurons"], 3)
+        self.assertEqual(out["layers_touched"], 2)
+        hist = {row["layer"]: row["count"] for row in out["layer_histogram"]}
+        self.assertEqual(hist, {0: 2, 2: 1})
+        self.assertEqual(sum(hist.values()), out["neurons"])
+        self.assertEqual(out["top_neurons"][0]["neuron"], 1)
+        self.assertAlmostEqual(out["max_abs_delta"], 0.9)
+        layer0 = [r for r in out["per_layer_top"] if r["layer"] == 0][0]
+        self.assertEqual(layer0["top_neuron"], 1)
+
+    def test_show_missing_circuit_fails_cleanly(self):
+        out = json.loads(tools.handle_show({"circuit": "nope"}))
+        self.assertFalse(out["success"])
+        out = json.loads(tools.handle_show({}))
+        self.assertFalse(out["success"])
+
+
+class GuardrailTest(unittest.TestCase):
+    """min_quality guardrail in handle_generate, with load_model patched
+    to the tiny model so no download can happen."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._old = os.environ.get("NEURON_STEER_HOME")
+        os.environ["NEURON_STEER_HOME"] = self.tmp.name
+        self.model = tiny_model()
+        self.tok = FakeTokenizer()
+        store.save_circuit("guard", Circuit(
+            "tiny", [NeuronRef(0, 3, 1.0), NeuronRef(3, 9, -1.0)],
+            positive_count=3, negative_count=3,
+        ))
+        self._orig_load = engine.load_model
+        engine.load_model = lambda model_id, device=None: (self.model, self.tok)
+
+    def tearDown(self):
+        engine.load_model = self._orig_load
+        if self._old is None:
+            os.environ.pop("NEURON_STEER_HOME", None)
+        else:
+            os.environ["NEURON_STEER_HOME"] = self._old
+        self.tmp.cleanup()
+
+    def test_floor_breach_warns_and_offers_safer_dose(self):
+        # Quality can never exceed 1.0, so a floor of 2.0 always breaches:
+        # deterministic exercise of the guardrail path.
+        out = json.loads(tools.handle_generate({
+            "prompt": "hello", "circuit": "guard", "multiplier": 0.0,
+            "max_new_tokens": 8, "min_quality": 2.0,
+        }))
+        self.assertTrue(out["success"])
+        self.assertIn("warning", out)
+        self.assertEqual(out["fallback_multiplier"], 0.5)
+        self.assertIn("fallback", out)
+        self.assertIn("fallback_quality", out)
+
+    def test_no_floor_no_warning(self):
+        out = json.loads(tools.handle_generate({
+            "prompt": "hello", "circuit": "guard", "multiplier": 0.0,
+            "max_new_tokens": 8,
+        }))
+        self.assertTrue(out["success"])
+        self.assertNotIn("warning", out)
+        self.assertNotIn("min_quality", out)
 
 
 if __name__ == "__main__":
