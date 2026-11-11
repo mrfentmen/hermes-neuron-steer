@@ -306,7 +306,7 @@ class DemoToolTest(unittest.TestCase):
         # The demo must never call load_model: it builds its tiny model in
         # memory. Patch load_model to explode so any regression fails here
         # instead of silently starting a download.
-        def _boom(model_id, device=None):
+        def _boom(model_id, device=None, **kw):
             raise AssertionError("demo must not load a model")
 
         original = engine.load_model
@@ -385,7 +385,7 @@ class GuardrailTest(unittest.TestCase):
             positive_count=3, negative_count=3,
         ))
         self._orig_load = engine.load_model
-        engine.load_model = lambda model_id, device=None: (self.model, self.tok)
+        engine.load_model = lambda model_id, device=None, **kw: (self.model, self.tok)
 
     def tearDown(self):
         engine.load_model = self._orig_load
@@ -416,6 +416,31 @@ class GuardrailTest(unittest.TestCase):
         self.assertTrue(out["success"])
         self.assertNotIn("warning", out)
         self.assertNotIn("min_quality", out)
+
+
+class DownloadGateTest(unittest.TestCase):
+    """The plugin must never download a model on its own: load_model is
+    local-cache-only unless the caller explicitly opts in."""
+
+    FAKE_ID = "neuron-steer/no-such-model-000"
+
+    def test_uncached_model_is_refused_not_downloaded(self):
+        # local_files_only short-circuits before any network access, so
+        # this test itself proves the refusal happens offline.
+        with self.assertRaises(RuntimeError) as ctx:
+            engine.load_model(self.FAKE_ID)
+        self.assertIn("does not download models automatically", str(ctx.exception))
+        self.assertIn("allow_download", str(ctx.exception))
+
+    def test_handler_surfaces_the_refusal(self):
+        out = json.loads(tools.handle_find({
+            "name": "gate-check",
+            "positive_prompts": POSITIVE,
+            "negative_prompts": NEGATIVE,
+            "model": self.FAKE_ID,
+        }))
+        self.assertFalse(out["success"])
+        self.assertIn("does not download models automatically", out["error"])
 
 
 if __name__ == "__main__":
