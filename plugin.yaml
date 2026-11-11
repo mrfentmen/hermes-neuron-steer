@@ -1,5 +1,6 @@
 name: neuron-steer
 version: "1.0.0"
+requires_hermes: ">=0.20.0"
 description: >-
   Neuron steering for Hermes Agent, implementing Nous Research's own
   Contrastive Neuron Attribution (arXiv:2605.12290). Find the sparse MLP
