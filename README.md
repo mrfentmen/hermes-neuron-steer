@@ -49,6 +49,15 @@ Circuits are stored as small JSON files under `$NEURON_STEER_HOME`
 (default: the plugin's `circuits/` folder), so they persist across sessions
 and can be shared.
 
+**No automatic downloads, ever.** Installing or loading the plugin
+downloads nothing, and the tools only use models already in your local
+Hugging Face cache — ask for an uncached model and you get an error with
+instructions, not a 3.1 GB surprise. A model is fetched only when you
+explicitly opt in per call: `allow_download: true` on the tools,
+`--allow-download` on the CLI, or `NEURON_STEER_ALLOW_DOWNLOAD=1` in the
+environment. Or download it yourself first:
+`huggingface-cli download Qwen/Qwen2.5-1.5B-Instruct`.
+
 ## Try it in ten seconds (no download)
 
 ```bash
@@ -103,13 +112,14 @@ not a wrapper around the paper's code.
 
 ## Status — read this before citing results
 
-- **VERIFIED:** the plugin's mechanics. 19 unit tests pass
+- **VERIFIED:** the plugin's mechanics. 21 unit tests pass
   (`python -m unittest discover -s tests`, also run in CI on every push),
   covering CNA ranking against a manual recompute, ablation/amplification
   hook exactness (×0 zeroes only the targeted neurons, ×2 doubles them,
   ×1 is identity), greedy-generation determinism, the quality metric's
   math, circuit storage, the circuit inspector, the quality guardrail,
-  the offline demo running without ever touching the model loader, and
+  the offline demo running without ever touching the model loader, the
+  no-download gate refusing an uncached model instead of fetching it, and
   Hermes registration of all six tools, the slash command and the CLI.
   Tests run offline against a tiny randomly-initialised Llama and
   complete in ~13 seconds.
