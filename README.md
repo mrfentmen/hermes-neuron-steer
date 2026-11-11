@@ -1,5 +1,9 @@
 # NeuronSteer — CNA neuron steering for Hermes Agent
 
+![NeuronSteer: a field of MLP neurons with one sparse circuit lit up](docs/banner.jpg)
+
+[![tests](https://github.com/mrfentmen/hermes-neuron-steer/actions/workflows/tests.yml/badge.svg)](https://github.com/mrfentmen/hermes-neuron-steer/actions/workflows/tests.yml)
+
 NeuronSteer brings **Contrastive Neuron Attribution (CNA)** — Nous Research's
 own neuron-steering method, published in *"Targeted Neuron Modulation via
 Contrastive Pair Search"* ([arXiv:2605.12290](https://arxiv.org/abs/2605.12290)) —
@@ -25,9 +29,11 @@ this itself, from chat or the CLI:
 | Tool | What it does |
 | --- | --- |
 | `neuron_steer_find` | Contrast two prompt sets, save the top-\|δ\| neurons as a named circuit |
-| `neuron_steer_generate` | Baseline vs steered generation, side by side, with quality scores |
+| `neuron_steer_generate` | Baseline vs steered generation, side by side, with quality scores — plus an optional `min_quality` floor: if steering wrecks the output, it warns and runs a safer dose |
 | `neuron_steer_scan` | Dose scan across multipliers, with quality + behavior-marker rates |
 | `neuron_steer_list` | List saved circuits |
+| `neuron_steer_show` | Inspect a circuit: layer histogram, strongest neuron per layer, top deltas |
+| `neuron_steer_demo` | The whole flow offline on a tiny in-memory model — no download, works on install |
 
 Plus a `/steer` slash command and a `hermes steer find|generate|scan|list` CLI.
 
@@ -42,6 +48,19 @@ pip install torch transformers   # in the environment Hermes runs in
 Circuits are stored as small JSON files under `$NEURON_STEER_HOME`
 (default: the plugin's `circuits/` folder), so they persist across sessions
 and can be shared.
+
+## Try it in ten seconds (no download)
+
+```bash
+hermes steer demo
+```
+
+This builds a tiny randomly initialised Llama in memory and runs the
+full flow — find a circuit by contrast, generate baseline vs ablated vs
+amplified, dose-scan it — with every output quality-scored. The weights
+are random, so the text is gibberish; what it proves is the mechanics,
+end to end, before you pull a real model. The `neuron_steer_demo` tool
+does the same from chat.
 
 ## Quick start
 
@@ -84,14 +103,16 @@ not a wrapper around the paper's code.
 
 ## Status — read this before citing results
 
-- **VERIFIED:** the plugin's mechanics. 13 unit tests pass
-  (`python -m unittest discover -s tests`), covering CNA ranking against a
-  manual recompute, ablation/amplification hook exactness (×0 zeroes only
-  the targeted neurons, ×2 doubles them, ×1 is identity), greedy-generation
-  determinism, the quality metric's math, circuit storage, and Hermes
-  registration of all four tools, the slash command and the CLI. Tests run
-  offline against a tiny randomly-initialised Llama and complete in
-  ~10 seconds.
+- **VERIFIED:** the plugin's mechanics. 19 unit tests pass
+  (`python -m unittest discover -s tests`, also run in CI on every push),
+  covering CNA ranking against a manual recompute, ablation/amplification
+  hook exactness (×0 zeroes only the targeted neurons, ×2 doubles them,
+  ×1 is identity), greedy-generation determinism, the quality metric's
+  math, circuit storage, the circuit inspector, the quality guardrail,
+  the offline demo running without ever touching the model loader, and
+  Hermes registration of all six tools, the slash command and the CLI.
+  Tests run offline against a tiny randomly-initialised Llama and
+  complete in ~13 seconds.
 - **UNVERIFIED:** end-to-end steering behavior on a real model. A smoke
   script (`scripts/smoke_test.py`) reproduces the paper's refusal
   experiment on `Qwen/Qwen2.5-1.5B-Instruct`; it has not yet been run to
@@ -109,6 +130,8 @@ tools.py        Tool handlers (validate first, load models lazily)
 cli.py          CLI surface
 engine.py       The CNA engine: find / steer / scan / quality metric
 store.py        Circuit storage (JSON, named, portable)
+demo.py         Offline demo: the full flow on a tiny in-memory model
+docs/           Banner art for the catalog page
 examples/       The paper's refusal contrast prompt sets
 scripts/        Real-model smoke test
 tests/          Offline unit tests (tiny model, no downloads)
