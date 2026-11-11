@@ -33,6 +33,8 @@ def setup(parser) -> None:
     p_find.add_argument("--model", default=None, help="Hugging Face model id.")
     p_find.add_argument("--top-fraction", type=float, default=0.001)
     p_find.add_argument("--top-k", type=int, default=None)
+    p_find.add_argument("--allow-download", action="store_true",
+                        help="Allow downloading the model if it is not cached (default: cached models only).")
 
     p_gen = sub.add_parser("generate", help="Generate with a saved circuit modulated in.")
     p_gen.add_argument("--circuit", required=True)
@@ -43,6 +45,8 @@ def setup(parser) -> None:
     p_gen.add_argument("--no-baseline", action="store_true")
     p_gen.add_argument("--min-quality", type=float, default=None,
                        help="Quality floor; warn + safer-dose fallback if steered output falls below it.")
+    p_gen.add_argument("--allow-download", action="store_true",
+                       help="Allow downloading the model if it is not cached (default: cached models only).")
 
     p_scan = sub.add_parser("scan", help="Dose scan: one prompt set across multipliers.")
     p_scan.add_argument("--circuit", required=True)
@@ -51,6 +55,8 @@ def setup(parser) -> None:
     p_scan.add_argument("--marker", default=None, help="Regex scored per output.")
     p_scan.add_argument("--model", default=None)
     p_scan.add_argument("--max-new-tokens", type=int, default=64)
+    p_scan.add_argument("--allow-download", action="store_true",
+                        help="Allow downloading the model if it is not cached (default: cached models only).")
 
     sub.add_parser("list", help="List saved circuits.")
 
@@ -77,6 +83,7 @@ def handler(args) -> None:
             "model": args.model,
             "top_fraction": args.top_fraction,
             "top_k": args.top_k,
+            "allow_download": args.allow_download,
         })
     elif command == "generate":
         result = tools.handle_generate({
@@ -87,6 +94,7 @@ def handler(args) -> None:
             "max_new_tokens": args.max_new_tokens,
             "include_baseline": not args.no_baseline,
             "min_quality": args.min_quality,
+            "allow_download": args.allow_download,
         })
     elif command == "scan":
         result = tools.handle_scan({
@@ -96,6 +104,7 @@ def handler(args) -> None:
             "marker": args.marker,
             "model": args.model,
             "max_new_tokens": args.max_new_tokens,
+            "allow_download": args.allow_download,
         })
     elif command == "list":
         result = tools.handle_list({})
