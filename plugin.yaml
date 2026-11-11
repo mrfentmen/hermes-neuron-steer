@@ -1,6 +1,9 @@
 name: neuron-steer
-version: "1.2.0"
+version: "1.2.1"
 requires_hermes: ">=0.20.0"
+python_dependencies:
+  - "torch>=2.0,<3"
+  - "transformers>=4.36,<6"
 description: >-
   Neuron steering for Hermes Agent, implementing Nous Research's own
   Contrastive Neuron Attribution (arXiv:2605.12290). Find the sparse MLP
