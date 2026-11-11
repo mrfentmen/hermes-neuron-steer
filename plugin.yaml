@@ -1,5 +1,5 @@
 name: neuron-steer
-version: "1.1.0"
+version: "1.2.0"
 requires_hermes: ">=0.20.0"
 description: >-
   Neuron steering for Hermes Agent, implementing Nous Research's own
