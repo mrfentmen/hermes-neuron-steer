@@ -1,4 +1,4 @@
-"""CLI surface for NeuronSteer: `hermes steer <subcommand>`.
+"""CLI surface for NeuronSteer: `hermes neuron-steer <subcommand>`.
 
 Mirrors the tools so a circuit can be found, tested and dose-scanned from
 the terminal — which is also how you demo it. Prompt sets are text files,
@@ -116,6 +116,6 @@ def handler(args) -> None:
             "max_new_tokens": args.max_new_tokens,
         })
     else:
-        print("Usage: hermes steer {find|generate|scan|list|show|demo} — see --help.")
+        print("Usage: hermes neuron-steer {find|generate|scan|list|show|demo} — see --help.")
         return
     _print_json(json.loads(result))
