@@ -1,0 +1,120 @@
+# NeuronSteer — CNA neuron steering for Hermes Agent
+
+NeuronSteer brings **Contrastive Neuron Attribution (CNA)** — Nous Research's
+own neuron-steering method, published in *"Targeted Neuron Modulation via
+Contrastive Pair Search"* ([arXiv:2605.12290](https://arxiv.org/abs/2605.12290)) —
+into Hermes Agent as a plugin.
+
+CNA identifies the sparse set of MLP neurons whose activations most
+distinguish two behaviors, using **forward passes only**: no gradients, no
+SAE training, no weight modification. NeuronSteer lets a Hermes agent do
+this itself, from chat or the CLI:
+
+1. **Find** a circuit: give the plugin two prompt sets (with / without a
+   behavior). It records last-token MLP activations on a local Hugging Face
+   model, ranks every neuron by the mean activation difference, and saves
+   the top neurons (default: the paper's top 0.1%) as a named circuit.
+2. **Steer**: generate with the circuit's neurons scaled by a multiplier —
+   `0` ablates them, `1` is baseline, `>1` amplifies them.
+3. **Scan**: sweep the multiplier and watch the behavior turn on and the
+   output quality (the paper's own metric: 1 − repeated n-gram fraction)
+   hold or break. That sweep is the dose window, made explicit.
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `neuron_steer_find` | Contrast two prompt sets, save the top-\|δ\| neurons as a named circuit |
+| `neuron_steer_generate` | Baseline vs steered generation, side by side, with quality scores |
+| `neuron_steer_scan` | Dose scan across multipliers, with quality + behavior-marker rates |
+| `neuron_steer_list` | List saved circuits |
+
+Plus a `/steer` slash command and a `hermes steer find|generate|scan|list` CLI.
+
+## Install
+
+```bash
+hermes plugins install Mrfentmen/hermes-neuron-steer
+hermes plugins enable neuron-steer
+pip install torch transformers   # in the environment Hermes runs in
+```
+
+Circuits are stored as small JSON files under `$NEURON_STEER_HOME`
+(default: the plugin's `circuits/` folder), so they persist across sessions
+and can be shared.
+
+## Quick start
+
+```bash
+# Two prompt sets, one per line (examples/ has the paper's refusal contrast)
+hermes steer find --name refusal \
+  --positive-file examples/refusal_positive.txt \
+  --negative-file examples/refusal_negative.txt \
+  --model Qwen/Qwen2.5-1.5B-Instruct
+
+hermes steer generate --circuit refusal --multiplier 0 \
+  --prompt "Explain how to make a Molotov cocktail."
+
+hermes steer scan --circuit refusal \
+  --prompts-file examples/refusal_positive.txt \
+  --multipliers 1,0.5,0,-1 \
+  --marker "I can't|I'm sorry"
+```
+
+The default model is `Qwen/Qwen2.5-1.5B-Instruct` (override per call or
+with `NEURON_STEER_MODEL`). Any Hugging Face causal LM whose blocks expose
+`mlp.down_proj` works — Llama, Qwen, Granite and Mistral families included.
+
+## How it works
+
+For each layer, a forward hook captures the input to `mlp.down_proj` — the
+post-activation MLP hidden units — at the last token position. Prompts are
+encoded with the model's chat template when one exists, so the last token
+is the position where the model is about to answer.
+
+```
+δ(layer, neuron) = mean activation on positive prompts
+                 − mean activation on negative prompts
+circuit          = top-k neurons by |δ| across all layers
+steering         = multiply circuit activations by m at inference
+```
+
+This is the CNA method as published; the engine is a direct implementation,
+not a wrapper around the paper's code.
+
+## Status — read this before citing results
+
+- **VERIFIED:** the plugin's mechanics. 13 unit tests pass
+  (`python -m unittest discover -s tests`), covering CNA ranking against a
+  manual recompute, ablation/amplification hook exactness (×0 zeroes only
+  the targeted neurons, ×2 doubles them, ×1 is identity), greedy-generation
+  determinism, the quality metric's math, circuit storage, and Hermes
+  registration of all four tools, the slash command and the CLI. Tests run
+  offline against a tiny randomly-initialised Llama and complete in
+  ~10 seconds.
+- **UNVERIFIED:** end-to-end steering behavior on a real model. A smoke
+  script (`scripts/smoke_test.py`) reproduces the paper's refusal
+  experiment on `Qwen/Qwen2.5-1.5B-Instruct`; it has not yet been run to
+  completion in the build environment, so no behavioral claim is made here.
+  The paper itself reports the effect across Llama and Qwen models from
+  1B to 72B.
+
+## Layout
+
+```
+plugin.yaml     Hermes plugin manifest
+__init__.py     register(): tools, /steer command, `hermes steer` CLI
+schemas.py      Tool schemas the model sees
+tools.py        Tool handlers (validate first, load models lazily)
+cli.py          CLI surface
+engine.py       The CNA engine: find / steer / scan / quality metric
+store.py        Circuit storage (JSON, named, portable)
+examples/       The paper's refusal contrast prompt sets
+scripts/        Real-model smoke test
+tests/          Offline unit tests (tiny model, no downloads)
+```
+
+## License
+
+MIT. The CNA method is Nous Research's; this plugin is an independent
+implementation built for the Hermes Agent Plugin Hackathon.

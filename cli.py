@@ -1,0 +1,95 @@
+"""CLI surface for NeuronSteer: `hermes steer <subcommand>`.
+
+Mirrors the tools so a circuit can be found, tested and dose-scanned from
+the terminal — which is also how you demo it. Prompt sets are text files,
+one prompt per line (blank lines and lines starting with # are skipped).
+"""
+
+from __future__ import annotations
+
+import json
+
+
+def _read_prompts(path: str) -> list[str]:
+    with open(path, "r", encoding="utf-8") as fh:
+        return [
+            line.strip()
+            for line in fh
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+
+def _print_json(payload) -> None:
+    print(json.dumps(payload, indent=2))
+
+
+def setup(parser) -> None:
+    sub = parser.add_subparsers(dest="steer_command")
+
+    p_find = sub.add_parser("find", help="Find a CNA circuit from two prompt sets.")
+    p_find.add_argument("--name", required=True, help="Circuit name to save.")
+    p_find.add_argument("--positive-file", required=True, help="Prompts WITH the behavior, one per line.")
+    p_find.add_argument("--negative-file", required=True, help="Prompts WITHOUT the behavior, one per line.")
+    p_find.add_argument("--model", default=None, help="Hugging Face model id.")
+    p_find.add_argument("--top-fraction", type=float, default=0.001)
+    p_find.add_argument("--top-k", type=int, default=None)
+
+    p_gen = sub.add_parser("generate", help="Generate with a saved circuit modulated in.")
+    p_gen.add_argument("--circuit", required=True)
+    p_gen.add_argument("--prompt", required=True)
+    p_gen.add_argument("--multiplier", type=float, default=0.0)
+    p_gen.add_argument("--model", default=None)
+    p_gen.add_argument("--max-new-tokens", type=int, default=64)
+    p_gen.add_argument("--no-baseline", action="store_true")
+
+    p_scan = sub.add_parser("scan", help="Dose scan: one prompt set across multipliers.")
+    p_scan.add_argument("--circuit", required=True)
+    p_scan.add_argument("--prompts-file", required=True)
+    p_scan.add_argument("--multipliers", required=True, help="Comma list, e.g. 1,0.5,0,-1")
+    p_scan.add_argument("--marker", default=None, help="Regex scored per output.")
+    p_scan.add_argument("--model", default=None)
+    p_scan.add_argument("--max-new-tokens", type=int, default=64)
+
+    sub.add_parser("list", help="List saved circuits.")
+
+
+def handler(args) -> None:
+    try:
+        from . import tools
+    except ImportError:
+        import tools
+
+    command = getattr(args, "steer_command", None)
+    if command == "find":
+        result = tools.handle_find({
+            "name": args.name,
+            "positive_prompts": _read_prompts(args.positive_file),
+            "negative_prompts": _read_prompts(args.negative_file),
+            "model": args.model,
+            "top_fraction": args.top_fraction,
+            "top_k": args.top_k,
+        })
+    elif command == "generate":
+        result = tools.handle_generate({
+            "circuit": args.circuit,
+            "prompt": args.prompt,
+            "multiplier": args.multiplier,
+            "model": args.model,
+            "max_new_tokens": args.max_new_tokens,
+            "include_baseline": not args.no_baseline,
+        })
+    elif command == "scan":
+        result = tools.handle_scan({
+            "circuit": args.circuit,
+            "prompts": _read_prompts(args.prompts_file),
+            "multipliers": [float(x) for x in args.multipliers.split(",") if x.strip()],
+            "marker": args.marker,
+            "model": args.model,
+            "max_new_tokens": args.max_new_tokens,
+        })
+    elif command == "list":
+        result = tools.handle_list({})
+    else:
+        print("Usage: hermes steer {find|generate|scan|list} — see --help.")
+        return
+    _print_json(json.loads(result))

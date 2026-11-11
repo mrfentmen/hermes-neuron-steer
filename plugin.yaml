@@ -1,0 +1,15 @@
+name: neuron-steer
+version: "1.0.0"
+description: >-
+  Neuron steering for Hermes Agent, implementing Nous Research's own
+  Contrastive Neuron Attribution (arXiv:2605.12290). Find the sparse MLP
+  neurons that distinguish two behaviors with forward passes only, save
+  them as named circuits, then scale or ablate those neurons at inference
+  to steer a local model — plus a dose scan that maps where the behavior
+  turns on before output quality breaks. No training, no weight changes.
+provides_tools:
+  - neuron_steer_find
+  - neuron_steer_generate
+  - neuron_steer_scan
+  - neuron_steer_list
+provides_hooks: []
