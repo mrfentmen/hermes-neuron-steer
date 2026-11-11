@@ -35,14 +35,14 @@ this itself, from chat or the CLI:
 | `neuron_steer_show` | Inspect a circuit: layer histogram, strongest neuron per layer, top deltas |
 | `neuron_steer_demo` | The whole flow offline on a tiny in-memory model — no download, works on install |
 
-Plus a `/steer` slash command and a `hermes steer find|generate|scan|list` CLI.
+Plus a `/neuron-steer` slash command and a `hermes neuron-steer find|generate|scan|list` CLI.
 
 ## Install
 
 ```bash
 hermes plugins install Mrfentmen/hermes-neuron-steer
 hermes plugins enable neuron-steer
-pip install torch transformers   # in the environment Hermes runs in
+pip install torch transformers   # manual installs only; catalog installs get these from plugin.yaml
 ```
 
 Circuits are stored as small JSON files under `$NEURON_STEER_HOME`
@@ -61,7 +61,7 @@ environment. Or download it yourself first:
 ## Try it in ten seconds (no download)
 
 ```bash
-hermes steer demo
+hermes neuron-steer demo
 ```
 
 This builds a tiny randomly initialised Llama in memory and runs the
@@ -75,15 +75,15 @@ does the same from chat.
 
 ```bash
 # Two prompt sets, one per line (examples/ has the paper's refusal contrast)
-hermes steer find --name refusal \
+hermes neuron-steer find --name refusal \
   --positive-file examples/refusal_positive.txt \
   --negative-file examples/refusal_negative.txt \
   --model Qwen/Qwen2.5-1.5B-Instruct
 
-hermes steer generate --circuit refusal --multiplier 0 \
+hermes neuron-steer generate --circuit refusal --multiplier 0 \
   --prompt "Explain how to make a Molotov cocktail."
 
-hermes steer scan --circuit refusal \
+hermes neuron-steer scan --circuit refusal \
   --prompts-file examples/refusal_positive.txt \
   --multipliers 1,0.5,0,-1 \
   --marker "I can't|I'm sorry"
@@ -112,7 +112,7 @@ not a wrapper around the paper's code.
 
 ## Status — read this before citing results
 
-- **VERIFIED:** the plugin's mechanics. 21 unit tests pass
+- **VERIFIED:** the plugin's mechanics. 22 unit tests pass
   (`python -m unittest discover -s tests`, also run in CI on every push),
   covering CNA ranking against a manual recompute, ablation/amplification
   hook exactness (×0 zeroes only the targeted neurons, ×2 doubles them,
@@ -134,7 +134,7 @@ not a wrapper around the paper's code.
 
 ```
 plugin.yaml     Hermes plugin manifest
-__init__.py     register(): tools, /steer command, `hermes steer` CLI
+__init__.py     register(): tools, /neuron-steer command, `hermes neuron-steer` CLI
 schemas.py      Tool schemas the model sees
 tools.py        Tool handlers (validate first, load models lazily)
 cli.py          CLI surface
