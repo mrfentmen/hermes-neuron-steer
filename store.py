@@ -2,7 +2,9 @@
 
 Circuits are small JSON documents (model id + a sparse neuron list), kept
 in a per-user directory so they persist across Hermes sessions and can be
-steered by name. Location: $NEURON_STEER_HOME, else <plugin dir>/circuits.
+steered by name. Location: $NEURON_STEER_HOME, else
+get_hermes_home()/neuron-steer/circuits (falling back to
+$HERMES_HOME or ~/.hermes when Hermes itself is not importable).
 """
 
 from __future__ import annotations
@@ -21,9 +23,23 @@ except ImportError:  # loaded as a flat module directory
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
+def _default_base() -> Path:
+    """Per-user circuit home: Hermes home, never the plugin install dir
+    (install-dir storage is lost on plugin update and shared across
+    profiles)."""
+    try:
+        from hermes_constants import get_hermes_home
+
+        return Path(get_hermes_home()) / "neuron-steer" / "circuits"
+    except Exception:
+        home = os.environ.get("HERMES_HOME")
+        base = Path(home) if home else Path.home() / ".hermes"
+        return base / "neuron-steer" / "circuits"
+
+
 def circuits_dir() -> Path:
     home = os.environ.get("NEURON_STEER_HOME")
-    base = Path(home) if home else Path(__file__).resolve().parent / "circuits"
+    base = Path(home) if home else _default_base()
     base.mkdir(parents=True, exist_ok=True)
     return base
 
