@@ -101,13 +101,37 @@ def handle_generate(params, **kwargs):
             model, tok, params["prompt"],
             max_new_tokens=max_new, circuit=circuit, multiplier=multiplier,
         )
+        steered_quality = engine.repetition_quality(steered)
         result = {
             "circuit": params["circuit"],
             "model": model_id,
             "multiplier": multiplier,
             "steered": _clip(steered),
-            "steered_quality": round(engine.repetition_quality(steered), 4),
+            "steered_quality": round(steered_quality, 4),
         }
+        # Quality guardrail: when the caller sets a floor and the steered
+        # output falls below it, say so plainly and offer one safer dose —
+        # halfway back toward baseline — instead of a wrecked output.
+        if params.get("min_quality") is not None:
+            floor = float(params["min_quality"])
+            result["min_quality"] = floor
+            if steered_quality < floor:
+                fallback_multiplier = (multiplier + 1.0) / 2.0
+                fallback = engine.generate(
+                    model, tok, params["prompt"],
+                    max_new_tokens=max_new, circuit=circuit,
+                    multiplier=fallback_multiplier,
+                )
+                fallback_quality = engine.repetition_quality(fallback)
+                result["warning"] = (
+                    f"Steered quality {steered_quality:.3f} fell below the "
+                    f"floor {floor:.3f} at multiplier {multiplier}. A safer "
+                    f"dose was also run at multiplier {fallback_multiplier} "
+                    f"(quality {fallback_quality:.3f})."
+                )
+                result["fallback_multiplier"] = fallback_multiplier
+                result["fallback"] = _clip(fallback)
+                result["fallback_quality"] = round(fallback_quality, 4)
         if params.get("include_baseline", True):
             baseline = engine.generate(model, tok, params["prompt"], max_new_tokens=max_new)
             result["baseline"] = _clip(baseline)
@@ -157,9 +181,70 @@ def handle_list(params, **kwargs):
         return _err(exc)
 
 
+def handle_show(params, **kwargs):
+    del kwargs
+    try:
+        if not params.get("circuit"):
+            raise ValueError("neuron_steer_show requires 'circuit'.")
+        circuit = store.load_circuit(params["circuit"])
+        doc = store.load_circuit_doc(params["circuit"])
+        hist = circuit.layer_histogram()
+        deltas = [abs(n.delta) for n in circuit.neurons]
+        per_layer_top = []
+        for layer, refs in sorted(circuit.by_layer().items()):
+            best = max(refs, key=lambda r: abs(r.delta))
+            per_layer_top.append({
+                "layer": layer,
+                "count": len(refs),
+                "top_neuron": best.neuron,
+                "top_delta": round(best.delta, 4),
+            })
+        return _ok({
+            "circuit": params["circuit"],
+            "saved_at": doc.get("saved_at", ""),
+            "model": circuit.model_id,
+            "neurons": len(circuit.neurons),
+            "positive_count": circuit.positive_count,
+            "negative_count": circuit.negative_count,
+            "layers_touched": len(hist),
+            "layer_histogram": [
+                {"layer": layer, "count": count}
+                for layer, count in sorted(hist.items())
+            ],
+            "per_layer_top": per_layer_top,
+            "top_neurons": [n.to_dict() for n in circuit.neurons[:15]],
+            "mean_abs_delta": round(sum(deltas) / len(deltas), 4) if deltas else 0.0,
+            "max_abs_delta": round(max(deltas), 4) if deltas else 0.0,
+        })
+    except Exception as exc:
+        return _err(exc)
+
+
+def handle_demo(params, **kwargs):
+    del kwargs
+    try:
+        from . import demo
+    except ImportError:
+        import demo
+    try:
+        # No model is ever loaded from disk or the network here: the demo
+        # builds a tiny random model in memory (see demo.py).
+        top_k = int(params.get("top_k", 16))
+        max_new = int(params.get("max_new_tokens", 16))
+        if not 1 <= top_k <= 512:
+            raise ValueError("top_k must be between 1 and 512.")
+        if not 1 <= max_new <= 64:
+            raise ValueError("max_new_tokens must be between 1 and 64.")
+        return _ok(demo.run_demo(top_k=top_k, max_new_tokens=max_new))
+    except Exception as exc:
+        return _err(exc)
+
+
 HANDLERS = {
     "neuron_steer_find": handle_find,
     "neuron_steer_generate": handle_generate,
     "neuron_steer_scan": handle_scan,
     "neuron_steer_list": handle_list,
+    "neuron_steer_show": handle_show,
+    "neuron_steer_demo": handle_demo,
 }
