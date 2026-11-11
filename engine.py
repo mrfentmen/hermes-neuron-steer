@@ -28,6 +28,7 @@ load (and explain the missing dependency) without them installed.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -60,22 +61,46 @@ def pick_device(requested: str | None = None) -> str:
     return "cpu"
 
 
-def load_model(model_id: str, device: str | None = None):
-    """Load (and cache) a causal LM + tokenizer by Hugging Face id."""
+def load_model(model_id: str, device: str | None = None, allow_download: bool = False):
+    """Load (and cache) a causal LM + tokenizer by Hugging Face id.
+
+    Download policy: NeuronSteer never downloads a model on its own. By
+    default only models already in the local Hugging Face cache load;
+    anything else fails with instructions instead of starting a multi-GB
+    download. A download happens only when the caller explicitly opts in
+    (``allow_download=True``, or the env var NEURON_STEER_ALLOW_DOWNLOAD=1).
+    """
     torch = _torch()
     if model_id in _MODEL_CACHE:
         return _MODEL_CACHE[model_id]
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    allow = allow_download or os.environ.get("NEURON_STEER_ALLOW_DOWNLOAD") == "1"
+    local_only = not allow
     dev = pick_device(device)
     dtype = torch.float32 if dev == "cpu" else torch.float16
-    tok = AutoTokenizer.from_pretrained(model_id)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
     try:
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    except TypeError:  # transformers < 5 used the torch_dtype kwarg
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
+        tok = AutoTokenizer.from_pretrained(model_id, local_files_only=local_only)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, dtype=dtype, local_files_only=local_only)
+        except TypeError:  # transformers < 5 used the torch_dtype kwarg
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, torch_dtype=dtype, local_files_only=local_only)
+    except Exception as exc:
+        if local_only:
+            raise RuntimeError(
+                f"Model {model_id!r} is not in the local Hugging Face cache, "
+                "and NeuronSteer does not download models automatically. "
+                "To fetch it explicitly (the default model is a 3.1 GB "
+                "download), pass allow_download=true to the tool (or "
+                "--allow-download on the CLI, or set "
+                "NEURON_STEER_ALLOW_DOWNLOAD=1), or download it yourself "
+                f"first: huggingface-cli download {model_id}"
+            ) from exc
+        raise
     model.to(dev)
     model.eval()
     _MODEL_CACHE[model_id] = (model, tok)
